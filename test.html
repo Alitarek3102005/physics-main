@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>مختبر فاراداي: التجارب التفاعلية</title>
+    <title>مختبر فاراداي: التجارب التفاعلية | خطوط انسيابية ثلاثية الأبعاد</title>
     <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;500;800&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -52,6 +52,7 @@
             backdrop-filter: blur(10px);
             transition: all 0.3s ease;
             animation: pulse 2s infinite;
+            z-index: 200;
         }
         
         .scroll-indicator:hover {
@@ -1861,7 +1862,7 @@
         }
         
         // Update AI video section
-        updateAiVideoParameters();
+        if(typeof updateAiVideoParameters === 'function') updateAiVideoParameters();
     };
 
     window.resetSim = () => { 
@@ -1990,7 +1991,38 @@
         }
     }
 
-    /** --- RENDERER --- */
+    /** --- RENDERER with new Bézier curves for magnet mode (الخطوط الانسيابية) --- */
+    // Helper functions for smooth Bézier field lines
+    function drawArrow(ctx, x, y, angle) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(angle);
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(-8, -5);
+        ctx.lineTo(-8, 5);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+    }
+
+    function drawFieldCurve(ctx, x1, y1, cp1x, cp1y, cp2x, cp2y, x2, y2, showArrow = true, tArrow = 0.5) {
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, x2, y2);
+        ctx.stroke();
+
+        if (showArrow) {
+            let t = tArrow;
+            let dx = 3 * (1 - t) * (1 - t) * (cp1x - x1) + 6 * (1 - t) * t * (cp2x - cp1x) + 3 * t * t * (x2 - cp2x);
+            let dy = 3 * (1 - t) * (1 - t) * (cp1y - y1) + 6 * (1 - t) * t * (cp2y - cp1y) + 3 * t * t * (y2 - cp2y);
+            let angle = Math.atan2(dy, dx);
+            let midX = Math.pow(1 - t, 3) * x1 + 3 * Math.pow(1 - t, 2) * t * cp1x + 3 * (1 - t) * t * t * cp2x + Math.pow(t, 3) * x2;
+            let midY = Math.pow(1 - t, 3) * y1 + 3 * Math.pow(1 - t, 2) * t * cp1y + 3 * (1 - t) * t * t * cp2y + Math.pow(t, 3) * y2;
+            drawArrow(ctx, midX, midY, angle);
+        }
+    }
+
     function draw() {
         ctx.clearRect(0,0,W,H);
         if(settings.showField) {
@@ -2003,39 +2035,77 @@
         const cx = W/2; const cy = H/2;
         const coilColor = state.power > 200 ? '#ffaa55' : '#cd7f32';
 
-        // --- 1. FIELD LINES ---
+        // --- 1. FIELD LINES (مدمج: منحنيات بيزيه للمغناطيس، وشبكة متجهات للمحول) ---
         if(settings.showField) {
-            bCtx.strokeStyle = 'rgba(0, 243, 255, 0.15)';
-            bCtx.lineWidth = 1;
-            bCtx.beginPath();
-            
-            let objPol = settings.mode===0 ? settings.polarity : (Math.sin(state.time*settings.strength*2)>0?1:-1);
-            let mx = state.objX;
-            let poleOff = 60 * objPol;
+            if(settings.mode === 0) {
+                // ========== خطوط المجال الانسيابية (Bézier) للمغناطيس ==========
+                bCtx.strokeStyle = 'rgba(0, 243, 255, 0.35)';
+                bCtx.lineWidth = 1.5;
+                bCtx.fillStyle = 'rgba(0, 243, 255, 0.7)';
 
-            vectors.forEach(v => {
-                let dx = v.x - mx; let dy = v.y - cy;
-                let dist = Math.sqrt(dx*dx+dy*dy);
-                if(dist < 50) return; 
+                let pol = settings.polarity;
+                let mx = state.objX;
+                let w = 180, h = 60;
+                let nX = mx + (w/2 - 5) * pol;
+                let sX = mx - (w/2 - 5) * pol;
 
-                let angN = Math.atan2(cy - v.y, (mx - poleOff) - v.x);
-                let angS = Math.atan2(cy - v.y, (mx + poleOff) - v.x);
-                
-                let combinedAng = (angN - angS) * 2; 
-                if(settings.mode === 0) combinedAng += Math.PI; 
+                // الحلقات المغلقة (فوق وتحت)
+                const numLoops = 6;
+                for (let i = 1; i <= numLoops; i++) {
+                    let yDist = (i / numLoops) * (h/2 - 5);
+                    let startYTop = cy - yDist;
+                    let startYBot = cy + yDist;
+                    let spreadX = 40 + i * 45;
+                    let spreadY = 60 + i * 55;
+                    drawFieldCurve(bCtx, nX, startYTop, nX + spreadX * pol, cy - spreadY, sX - spreadX * pol, cy - spreadY, sX, startYTop, true, 0.5);
+                    drawFieldCurve(bCtx, nX, startYBot, nX + spreadX * pol, cy + spreadY, sX - spreadX * pol, cy + spreadY, sX, startYBot, true, 0.5);
+                }
 
-                let len = 15 * (400/(dist+100)); 
+                // الخطوط المفتوحة من الزوايا
+                let yStartEdge = cy - (h/2 - 5);
+                drawFieldCurve(bCtx, nX, yStartEdge, nX + 150 * pol, yStartEdge - 50, nX + 300 * pol, yStartEdge - 150, nX + 400 * pol, cy - 350, true, 0.3);
+                drawFieldCurve(bCtx, sX - 400 * pol, cy - 350, sX - 300 * pol, yStartEdge - 150, sX - 150 * pol, yStartEdge - 50, sX, yStartEdge, true, 0.7);
+                let yBotEdge = cy + (h/2 - 5);
+                drawFieldCurve(bCtx, nX, yBotEdge, nX + 150 * pol, yBotEdge + 50, nX + 300 * pol, yBotEdge + 150, nX + 400 * pol, cy + 350, true, 0.3);
+                drawFieldCurve(bCtx, sX - 400 * pol, cy + 350, sX - 300 * pol, yBotEdge + 150, sX - 150 * pol, yBotEdge + 50, sX, yBotEdge, true, 0.7);
+
+                // الخطوط المستقيمة في المنتصف
+                drawFieldCurve(bCtx, nX, cy, nX + 100 * pol, cy, nX + 250 * pol, cy, nX + 500 * pol, cy, true, 0.4);
+                drawFieldCurve(bCtx, sX - 500 * pol, cy, sX - 250 * pol, cy, sX - 100 * pol, cy, sX, cy, true, 0.6);
+            } 
+            else if(settings.mode === 1) {
+                // ========== شبكة المتجهات للمحول الكهربائي (AC) كما هي ==========
+                bCtx.strokeStyle = 'rgba(0, 243, 255, 0.15)';
+                bCtx.lineWidth = 1;
+                bCtx.beginPath();
                 
-                let tx = v.x + Math.cos(combinedAng)*len;
-                let ty = v.y + Math.sin(combinedAng)*len;
-                
-                bCtx.moveTo(v.x, v.y);
-                bCtx.lineTo(tx, ty);
-                
-                bCtx.moveTo(tx, ty);
-                bCtx.lineTo(tx - Math.cos(combinedAng+0.5)*4, ty - Math.sin(combinedAng+0.5)*4);
-            });
-            bCtx.stroke();
+                let objPol = Math.sin(state.time * settings.strength * 2) > 0 ? 1 : -1;
+                let mx = state.objX;
+                let poleOff = 60 * objPol;
+
+                vectors.forEach(v => {
+                    let dx = v.x - mx; let dy = v.y - cy;
+                    let dist = Math.sqrt(dx*dx+dy*dy);
+                    if(dist < 50) return; 
+
+                    let angN = Math.atan2(cy - v.y, (mx - poleOff) - v.x);
+                    let angS = Math.atan2(cy - v.y, (mx + poleOff) - v.x);
+                    
+                    let combinedAng = (angN - angS) * 2; 
+
+                    let len = 15 * (400/(dist+100)); 
+                    
+                    let tx = v.x + Math.cos(combinedAng)*len;
+                    let ty = v.y + Math.sin(combinedAng)*len;
+                    
+                    bCtx.moveTo(v.x, v.y);
+                    bCtx.lineTo(tx, ty);
+                    
+                    bCtx.moveTo(tx, ty);
+                    bCtx.lineTo(tx - Math.cos(combinedAng+0.5)*4, ty - Math.sin(combinedAng+0.5)*4);
+                });
+                bCtx.stroke();
+            }
         }
 
         // --- 2. CIRCUIT ---
@@ -2075,9 +2145,7 @@
         });
 
         // --- 3. COIL (Back Loop) ---
-        // UPDATE: Spacing calculated to fit N rings exactly across coilWidth
         const spacing = coilWidth / (settings.turns - 1);
-
         ctx.strokeStyle = '#5a3a22'; 
         ctx.lineWidth = 6;
         for(let i=0; i<settings.turns; i++) {
@@ -2143,12 +2211,9 @@
         ctx.beginPath(); ctx.arc(cx, bulbY, 20, 0, Math.PI*2); ctx.fill();
         ctx.strokeStyle = '#444'; ctx.lineWidth = 2; ctx.stroke();
 
-        // حساب شدة الإضاءة بناءً على القدرة
-        // تقسيم القدرة على معامل لجعل التوهج منطقياً بصرياً
         let glowIntensity = Math.min(1.5, state.power / 50); 
 
         if(glowIntensity > 0.05) {
-            // إنشاء تدرج ضوئي يتوسع مع زيادة القدرة
             let glowRadius = 50 + (glowIntensity * 100); 
             let grad = ctx.createRadialGradient(cx, bulbY, 5, cx, bulbY, glowRadius);
             
@@ -2160,7 +2225,6 @@
             ctx.save();
             ctx.globalCompositeOperation = 'screen';
             ctx.fillStyle = grad;
-            // إضافة تأثير "هالة" (Bloom)
             ctx.shadowBlur = 20 * glowIntensity;
             ctx.shadowColor = eColor;
             
@@ -2168,7 +2232,6 @@
             ctx.arc(cx, bulbY, glowRadius, 0, Math.PI*2); 
             ctx.fill();
             
-            // رسم خيوط المصباح المتوهجة
             ctx.strokeStyle = '#fff';
             ctx.lineWidth = 2 * glowIntensity;
             ctx.beginPath();
@@ -2388,406 +2451,34 @@
         ctx.stroke();
     }
 
-    /** --- AI VIDEO SYSTEM --- */
-    
-    // AI Video Parameters
-    const aiVideoParameters = {
-        expType: 'قانون فاراداي (المغناطيس المتحرك)',
-        turns: 12,
-        strength: 1.0,
-        resistance: 10,
-        quality: 2, // 1=منخفضة, 2=متوسطة, 3=عالية
-        duration: 2 // دقائق
-    };
-    
-    // AI Video state
-    let aiVideoGenerated = false;
-    let aiVideoUrl = '';
-    let aiVideoFileName = '';
-    let aiVideoSize = 0;
-    let aiVideoDuration = 0;
-    
-    // Initialize AI video parameters from simulation settings
-    function updateAiVideoParameters() {
-        aiVideoParameters.expType = settings.mode === 0 
-            ? 'قانون فاراداي (المغناطيس المتحرك)' 
-            : 'الحث المتبادل (المحول الكهربائي)';
-        
-        aiVideoParameters.turns = settings.turns;
-        aiVideoParameters.strength = settings.strength;
-        aiVideoParameters.resistance = settings.res;
-        
-        // Update UI
-        document.getElementById('aiExpType').textContent = aiVideoParameters.expType;
-        document.getElementById('aiTurns').textContent = aiVideoParameters.turns;
-        document.getElementById('aiStrength').textContent = settings.mode === 0 
-            ? aiVideoParameters.strength + ' T' 
-            : aiVideoParameters.strength + ' Hz';
-        document.getElementById('aiStrengthLabel').textContent = settings.mode === 0 
-            ? 'قوة المغناطيس (B):' 
-            : 'تردد المصدر (Hz):';
-        document.getElementById('aiResistance').textContent = aiVideoParameters.resistance + ' Ω';
-        
-        // Update sliders
-        document.getElementById('aiTurnsSlider').value = aiVideoParameters.turns;
-        document.getElementById('aiStrengthSlider').value = aiVideoParameters.strength;
-        document.getElementById('aiResistanceSlider').value = aiVideoParameters.resistance;
-        document.getElementById('aiQualitySlider').value = aiVideoParameters.quality;
-        document.getElementById('aiDurationSlider').value = aiVideoParameters.duration;
-    }
-    
-    function updateAiParameter(param, value) {
-        aiVideoParameters[param] = parseFloat(value);
-        
-        // Update UI
-        switch(param) {
-            case 'turns':
-                document.getElementById('aiTurns').textContent = value;
-                break;
-            case 'strength':
-                document.getElementById('aiStrength').textContent = settings.mode === 0 
-                    ? value + ' T' 
-                    : value + ' Hz';
-                break;
-            case 'resistance':
-                document.getElementById('aiResistance').textContent = value + ' Ω';
-                break;
-            case 'quality':
-                const qualityLabels = ['منخفضة', 'متوسطة', 'عالية'];
-                document.getElementById('aiQuality').textContent = qualityLabels[value - 1];
-                break;
-            case 'duration':
-                document.getElementById('aiDuration').textContent = value + ' دقيقة';
-                break;
-        }
-    }
-    
-    function generateAiVideo() {
-        const generateBtn = document.getElementById('generateAiVideoBtn');
-        const statusElement = document.getElementById('aiGenerationStatus');
-        
-        // Show loading state
-        generateBtn.classList.add('generating');
-        statusElement.style.display = 'block';
-        
-        // Simulate AI video generation (in a real app, this would call an API)
-        setTimeout(() => {
-            // Simulate success
-            aiVideoGenerated = true;
-            
-            // Create a mock video URL (in a real app, this would be from the AI service)
-            aiVideoUrl = 'https://example.com/ai-generated-video.mp4'; // Placeholder
-            aiVideoFileName = `شرح_تجربة_${aiVideoParameters.expType.replace(/\s+/g, '_')}.mp4`;
-            aiVideoSize = Math.floor(Math.random() * 50 + 20) * 1024 * 1024; // 20-70 MB
-            aiVideoDuration = aiVideoParameters.duration * 60; // Convert to seconds
-            
-            // Update video player
-            const videoElement = document.getElementById('aiGeneratedVideo');
-            const sourceElement = videoElement.querySelector('source');
-            const placeholder = document.getElementById('aiVideoPlaceholder');
-            
-            // Hide placeholder and show video
-            placeholder.style.display = 'none';
-            videoElement.style.display = 'block';
-            
-            // In a real app, you would set the actual video source
-            // For now, we'll use a placeholder message
-            videoElement.innerHTML = `
-                <div style="width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; background: linear-gradient(135deg, #0a0a1a, #020204); color: white;">
-                    <i class="fas fa-check-circle" style="font-size: 80px; margin-bottom: 20px; color: #00ff88;"></i>
-                    <h3 style="color: var(--neon-gold); margin-bottom: 10px;">تم إنشاء الفيديو بنجاح!</h3>
-                    <p style="text-align: center; max-width: 400px; line-height: 1.6; margin-bottom: 20px;">
-                        تم إنشاء فيديو شرح بتقنية الذكاء الاصطناعي بناءً على معاملات تجربتك.
-                    </p>
-                    <div style="background: rgba(255,255,255,0.1); padding: 15px; border-radius: 10px; width: 80%; margin-bottom: 20px;">
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                            <span>نوع التجربة:</span>
-                            <span style="color: var(--neon-blue);">${aiVideoParameters.expType}</span>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                            <span>عدد اللفات:</span>
-                            <span style="color: var(--neon-blue);">${aiVideoParameters.turns}</span>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                            <span>${settings.mode === 0 ? 'قوة المغناطيس:' : 'التردد:'}</span>
-                            <span style="color: var(--neon-blue);">${aiVideoParameters.strength} ${settings.mode === 0 ? 'T' : 'Hz'}</span>
-                        </div>
-                        <div style="display: flex; justify-content: space-between;">
-                            <span>المقاومة:</span>
-                            <span style="color: var(--neon-blue);">${aiVideoParameters.resistance} Ω</span>
-                        </div>
-                    </div>
-                    <p style="color: #aaa; font-size: 0.9rem;">
-                        في التطبيق الحقيقي، سيكون هذا فيديو حقيقيًا تم إنشاؤه بواسطة الذكاء الاصطناعي
-                    </p>
-                </div>
-            `;
-            
-            // Show download button
-            document.getElementById('downloadAiVideoBtn').style.display = 'flex';
-            
-            // Reset loading state
-            generateBtn.classList.remove('generating');
-            statusElement.style.display = 'none';
-            
-            // Show success message
-            showNotification('تم إنشاء الفيديو بنجاح! يمكنك الآن تشغيله أو تنزيله.', 'success');
-            
-            // Scroll to AI video section
-            document.getElementById('aiVideoSection').scrollIntoView({ 
-                behavior: 'smooth',
-                block: 'center'
-            });
-        }, 3000); // Simulate 3 second processing time
-    }
-    
-    function playAiVideo() {
-        if (!aiVideoGenerated) {
-            showNotification('يرجى إنشاء فيديو أولاً باستخدام زر "إنشاء فيديو بالذكاء الاصطناعي"', 'warning');
-            return;
-        }
-        
-        const videoElement = document.getElementById('aiGeneratedVideo');
-        
-        // In a real app, you would play the actual video
-        // For now, show a message
-        showNotification('جاري تشغيل الفيديو... في التطبيق الحقيقي، سيكون هذا فيديو حقيقيًا', 'info');
-    }
-    
-    function downloadAiVideo() {
-        if (!aiVideoGenerated) {
-            showNotification('لا يوجد فيديو للتنزيل', 'warning');
-            return;
-        }
-        
-        // In a real app, you would trigger the actual download
-        // For now, show a message
-        showNotification('جاري تحميل الفيديو... في التطبيق الحقيقي، سيكون هذا تنزيلاً حقيقياً للفيديو', 'info');
-        
-        // Simulate download
-        setTimeout(() => {
-            showNotification(`تم تحميل الفيديو: ${aiVideoFileName} (${formatFileSize(aiVideoSize)})`, 'success');
-        }, 1500);
-    }
-    
-    function showNotification(message, type) {
-        // Create notification element
-        const notification = document.createElement('div');
-        notification.style.position = 'fixed';
-        notification.style.top = '20px';
-        notification.style.left = '50%';
-        notification.style.transform = 'translateX(-50%)';
-        notification.style.padding = '15px 25px';
-        notification.style.borderRadius = '10px';
-        notification.style.color = 'white';
-        notification.style.fontWeight = '700';
-        notification.style.zIndex = '10000';
-        notification.style.boxShadow = '0 10px 30px rgba(0,0,0,0.5)';
-        notification.style.backdropFilter = 'blur(10px)';
-        notification.style.display = 'flex';
-        notification.style.alignItems = 'center';
-        notification.style.gap = '10px';
-        notification.style.animation = 'slideIn 0.3s ease';
-        
-        // Set color based on type
-        if (type === 'success') {
-            notification.style.background = 'linear-gradient(135deg, rgba(0, 255, 136, 0.9), rgba(0, 200, 100, 0.9))';
-            notification.style.border = '1px solid rgba(0, 255, 136, 0.3)';
-            notification.innerHTML = `<i class="fas fa-check-circle"></i><span>${message}</span>`;
-        } else if (type === 'warning') {
-            notification.style.background = 'linear-gradient(135deg, rgba(255, 204, 0, 0.9), rgba(255, 170, 0, 0.9))';
-            notification.style.border = '1px solid rgba(255, 204, 0, 0.3)';
-            notification.innerHTML = `<i class="fas fa-exclamation-triangle"></i><span>${message}</span>`;
-        } else {
-            notification.style.background = 'linear-gradient(135deg, rgba(0, 243, 255, 0.9), rgba(0, 200, 255, 0.9))';
-            notification.style.border = '1px solid rgba(0, 243, 255, 0.3)';
-            notification.innerHTML = `<i class="fas fa-info-circle"></i><span>${message}</span>`;
-        }
-        
-        document.body.appendChild(notification);
-        
-        // Remove notification after 5 seconds
-        setTimeout(() => {
-            notification.style.animation = 'slideOut 0.3s ease';
-            setTimeout(() => {
-                document.body.removeChild(notification);
-            }, 300);
-        }, 5000);
-        
-        // Add CSS for animations if not already added
-        if (!document.querySelector('#notification-styles')) {
-            const style = document.createElement('style');
-            style.id = 'notification-styles';
-            style.textContent = `
-                @keyframes slideIn {
-                    from { transform: translateX(-50%) translateY(-100px); opacity: 0; }
-                    to { transform: translateX(-50%) translateY(0); opacity: 1; }
-                }
-                @keyframes slideOut {
-                    from { transform: translateX(-50%) translateY(0); opacity: 1; }
-                    to { transform: translateX(-50%) translateY(-100px); opacity: 0; }
-                }
-            `;
-            document.head.appendChild(style);
-        }
-    }
-    
     /** --- VIDEO UPLOAD SYSTEM --- */
-    
-    // Video data storage
     const videoData = {
-        main: {
-            url: '',
-            title: 'فيديو شرح قانون فاراداي',
-            description: 'قم برفع فيديو لشرح قانون فاراداي للحث الكهرومغناطيسي. يجب أن يتضمن الفيديو شرحاً للقانون والتجارب العملية والتطبيقات.',
-            size: 0,
-            duration: 0,
-            fileName: ''
-        },
-        practical1: {
-            url: '',
-            title: 'المحولات الكهربائية',
-            description: 'تطبيق عملي لقانون فاراداي في المحولات الكهربائية المستخدمة في رفع وخفض الجهد في شبكات التوزيع الكهربائي.',
-            size: 0,
-            duration: 0,
-            fileName: ''
-        },
-        practical2: {
-            url: '',
-            title: 'مولدات التيار الكهربائي',
-            description: 'كيف يعمل مولد التيار الكهربائي باستخدام مبادئ الحث الكهرومغناطيسي لتوليد الكهرباء من الطاقة الميكانيكية.',
-            size: 0,
-            duration: 0,
-            fileName: ''
-        },
-        practical3: {
-            url: '',
-            title: 'تطبيقات الحث الكهرومغناطيسي',
-            description: 'شرح كيفية استخدام الحث الكهرومغناطيسي في تطبيقات عملية مثل الفرامل الكهرومغناطيسية وأجهزة الاستشعار.',
-            size: 0,
-            duration: 0,
-            fileName: ''
-        }
+        main: { url: '', title: 'فيديو شرح قانون فاراداي', description: 'قم برفع فيديو لشرح قانون فاراداي للحث الكهرومغناطيسي.', size: 0, duration: 0, fileName: '' },
+        practical1: { url: '', title: 'المحولات الكهربائية', description: 'تطبيق عملي لقانون فاراداي في المحولات الكهربائية.', size: 0, duration: 0, fileName: '' },
+        practical2: { url: '', title: 'مولدات التيار الكهربائي', description: 'كيف يعمل مولد التيار الكهربائي باستخدام مبادئ الحث الكهرومغناطيسي.', size: 0, duration: 0, fileName: '' },
+        practical3: { url: '', title: 'تطبيقات الحث الكهرومغناطيسي', description: 'شرح كيفية استخدام الحث الكهرومغناطيسي في تطبيقات عملية.', size: 0, duration: 0, fileName: '' }
     };
-    
     let currentVideoType = 'main';
-    
-    // Scroll to content sections
-    document.getElementById('scrollIndicator').addEventListener('click', function() {
-        document.getElementById('aiVideoSection').scrollIntoView({ 
-            behavior: 'smooth',
-            block: 'start'
-        });
-    });
-    
-    // Back to simulation button
-    document.getElementById('backToSim').addEventListener('click', function() {
-        window.scrollTo({
-            top: 0,
-            behavior: 'smooth'
-        });
-    });
-    
-    // Show/hide back to simulation button based on scroll position
-    window.addEventListener('scroll', function() {
-        const backButton = document.getElementById('backToSim');
-        if (window.scrollY > 300) {
-            backButton.classList.add('show');
-        } else {
-            backButton.classList.remove('show');
-        }
-        
-        // Hide scroll indicator when user starts scrolling
-        const scrollIndicator = document.getElementById('scrollIndicator');
-        if (window.scrollY > 100) {
-            scrollIndicator.style.opacity = '0';
-            scrollIndicator.style.pointerEvents = 'none';
-        } else {
-            scrollIndicator.style.opacity = '1';
-            scrollIndicator.style.pointerEvents = 'auto';
-        }
-    });
-    
-    // PDF Viewer Controls
-    let pdfZoom = 1.0;
-    const pdfViewer = document.querySelector('.pdf-viewer');
-    
-    function zoomInPdf() {
-        pdfZoom += 0.2;
-        updatePdfZoom();
-    }
-    
-    function zoomOutPdf() {
-        if (pdfZoom > 0.5) {
-            pdfZoom -= 0.2;
-            updatePdfZoom();
-        }
-    }
-    
-    function resetZoomPdf() {
-        pdfZoom = 1.0;
-        updatePdfZoom();
-    }
-    
-    function updatePdfZoom() {
-        pdfViewer.style.transform = `scale(${pdfZoom})`;
-        pdfViewer.style.transformOrigin = 'center top';
-    }
-    
-    // Modal functions
-    function openModal(videoType) {
-        currentVideoType = videoType;
-        document.getElementById('videoModal').classList.add('show');
-        resetModalForm();
-    }
-    
-    function closeModal() {
-        document.getElementById('videoModal').classList.remove('show');
-    }
-    
-    function resetModalForm() {
-        document.getElementById('videoInfo').style.display = 'none';
-        document.getElementById('videoTitle').value = videoData[currentVideoType].title;
-        document.getElementById('videoDescription').value = videoData[currentVideoType].description;
-        document.getElementById('modalVideoInput').value = '';
-    }
-    
-    // Handle video upload in modal
+
+    function openModal(videoType) { currentVideoType = videoType; document.getElementById('videoModal').classList.add('show'); resetModalForm(); }
+    function closeModal() { document.getElementById('videoModal').classList.remove('show'); }
+    function resetModalForm() { document.getElementById('videoInfo').style.display = 'none'; document.getElementById('videoTitle').value = videoData[currentVideoType].title; document.getElementById('videoDescription').value = videoData[currentVideoType].description; document.getElementById('modalVideoInput').value = ''; }
     function handleModalVideoUpload(files) {
-        if (files.length === 0) return;
-        
+        if(files.length===0) return;
         const file = files[0];
-        
-        // Check file type
-        if (!file.type.startsWith('video/')) {
-            alert('الرجاء اختيار ملف فيديو فقط (MP4, WebM, OGG)');
-            return;
-        }
-        
-        // Check file size (max 100MB)
-        if (file.size > 100 * 1024 * 1024) {
-            alert('حجم الفيديو كبير جداً! الحد الأقصى 100 ميجابايت.');
-            return;
-        }
-        
-        // Create object URL for preview
+        if(!file.type.startsWith('video/')) { alert('الرجاء اختيار ملف فيديو فقط'); return; }
+        if(file.size > 100*1024*1024) { alert('حجم الفيديو كبير جداً! الحد الأقصى 100 ميجابايت.'); return; }
         const url = URL.createObjectURL(file);
-        
-        // Get video duration
         const video = document.createElement('video');
         video.src = url;
         video.onloadedmetadata = function() {
             const duration = video.duration;
-            const minutes = Math.floor(duration / 60);
-            const seconds = Math.floor(duration % 60);
-            
-            // Update modal form
+            const minutes = Math.floor(duration/60);
+            const seconds = Math.floor(duration%60);
             document.getElementById('videoName').textContent = file.name;
             document.getElementById('videoSize').textContent = formatFileSize(file.size);
-            document.getElementById('videoDuration').textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+            document.getElementById('videoDuration').textContent = `${minutes}:${seconds.toString().padStart(2,'0')}`;
             document.getElementById('videoInfo').style.display = 'block';
-            
-            // Store video data temporarily
             videoData[currentVideoType].tempUrl = url;
             videoData[currentVideoType].tempFile = file;
             videoData[currentVideoType].tempSize = file.size;
@@ -2795,344 +2486,74 @@
             videoData[currentVideoType].tempFileName = file.name;
         };
     }
-    
     function saveVideo() {
         const title = document.getElementById('videoTitle').value;
         const description = document.getElementById('videoDescription').value;
-        
-        if (!videoData[currentVideoType].tempUrl) {
-            alert('الرجاء رفع فيديو أولاً');
-            return;
-        }
-        
-        if (!title.trim()) {
-            alert('الرجاء إدخال عنوان للفيديو');
-            return;
-        }
-        
-        // Save video data
+        if(!videoData[currentVideoType].tempUrl) { alert('الرجاء رفع فيديو أولاً'); return; }
+        if(!title.trim()) { alert('الرجاء إدخال عنوان للفيديو'); return; }
         videoData[currentVideoType].url = videoData[currentVideoType].tempUrl;
         videoData[currentVideoType].title = title;
         videoData[currentVideoType].description = description;
         videoData[currentVideoType].size = videoData[currentVideoType].tempSize;
         videoData[currentVideoType].duration = videoData[currentVideoType].tempDuration;
         videoData[currentVideoType].fileName = videoData[currentVideoType].tempFileName;
-        
-        // Update video player
         updateVideoPlayer(currentVideoType);
-        
-        // Close modal
         closeModal();
-        
-        // Show success message
         showNotification('تم حفظ الفيديو بنجاح!', 'success');
     }
-    
     function updateVideoPlayer(videoType) {
-        const videoElement = document.getElementById(videoType === 'main' ? 'mainVideo' : 
-                                                    videoType === 'practical1' ? 'practicalVideo1' :
-                                                    videoType === 'practical2' ? 'practicalVideo2' : 'practicalVideo3');
-        
+        const videoElement = document.getElementById(videoType==='main'?'mainVideo':(videoType==='practical1'?'practicalVideo1':(videoType==='practical2'?'practicalVideo2':'practicalVideo3')));
         const sourceElement = videoElement.querySelector('source');
-        
-        if (videoData[videoType].url) {
+        if(videoData[videoType].url) {
             sourceElement.src = videoData[videoType].url;
             videoElement.load();
-            
-            // Update video info
-            if (videoType === 'main') {
+            if(videoType==='main') {
                 document.getElementById('mainVideoTitle').textContent = videoData[videoType].title;
                 document.getElementById('mainVideoDesc').textContent = videoData[videoType].description;
                 document.getElementById('mainVideoInfo').textContent = videoData[videoType].fileName;
-                document.getElementById('mainVideoStats').textContent = 
-                    `${formatDuration(videoData[videoType].duration)} • ${formatFileSize(videoData[videoType].size)}`;
+                document.getElementById('mainVideoStats').textContent = `${formatDuration(videoData[videoType].duration)} • ${formatFileSize(videoData[videoType].size)}`;
             } else {
-                const videoNum = videoType.replace('practical', '');
-                document.getElementById(`practicalVideo${videoNum}Info`).textContent = videoData[videoType].fileName;
-                document.getElementById(`practicalVideo${videoNum}Stats`).textContent = 
-                    `${formatDuration(videoData[videoType].duration)} • ${formatFileSize(videoData[videoType].size)}`;
+                const num = videoType.replace('practical','');
+                document.getElementById(`practicalVideo${num}Info`).textContent = videoData[videoType].fileName;
+                document.getElementById(`practicalVideo${num}Stats`).textContent = `${formatDuration(videoData[videoType].duration)} • ${formatFileSize(videoData[videoType].size)}`;
             }
         }
     }
-    
-    function formatFileSize(bytes) {
-        if (bytes < 1024) return bytes + ' بايت';
-        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' كيلوبايت';
-        return (bytes / (1024 * 1024)).toFixed(1) + ' ميجابايت';
-    }
-    
-    function formatDuration(seconds) {
-        const minutes = Math.floor(seconds / 60);
-        const secs = Math.floor(seconds % 60);
-        return `${minutes}:${secs.toString().padStart(2, '0')} دقيقة`;
-    }
-    
-    function toggleFullscreen(videoId) {
-        const video = document.getElementById(videoId);
-        
-        // For AI video
-        if (videoId === 'aiGeneratedVideo') {
-            if (!aiVideoGenerated) {
-                showNotification('لا يوجد فيديو للعرض. يرجى إنشاء فيديو أولاً.', 'warning');
-                return;
-            }
-        } else {
-            // For other videos
-            const videoType = videoId.replace('Video', '').toLowerCase();
-            if (!videoData[videoType]?.url) {
-                showNotification('لا يوجد فيديو للعرض. يرجى رفع فيديو أولاً.', 'warning');
-                return;
-            }
-        }
-        
-        if (video.requestFullscreen) {
-            video.requestFullscreen();
-        } else if (video.webkitRequestFullscreen) {
-            video.webkitRequestFullscreen();
-        } else if (video.msRequestFullscreen) {
-            video.msRequestFullscreen();
-        }
-    }
-    
-    function downloadVideo(videoId) {
-        const videoType = videoId.replace('Video', '').toLowerCase();
-        
-        if (!videoData[videoType]?.url) {
-            showNotification('لا يوجد فيديو للتنزيل. يرجى رفع فيديو أولاً.', 'warning');
-            return;
-        }
-        
-        const link = document.createElement('a');
-        link.href = videoData[videoType].url;
-        link.download = videoData[videoType].fileName || 'video.mp4';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    }
-    
-    // Drag and drop functionality
+    function formatFileSize(bytes) { if(bytes<1024) return bytes+' بايت'; if(bytes<1024*1024) return (bytes/1024).toFixed(1)+' كيلوبايت'; return (bytes/(1024*1024)).toFixed(1)+' ميجابايت'; }
+    function formatDuration(seconds) { const m=Math.floor(seconds/60); const s=Math.floor(seconds%60); return `${m}:${s.toString().padStart(2,'0')} دقيقة`; }
+    function toggleFullscreen(videoId) { const video = document.getElementById(videoId); if(video.requestFullscreen) video.requestFullscreen(); else if(video.webkitRequestFullscreen) video.webkitRequestFullscreen(); }
+    function downloadVideo(videoId) { const type = videoId.replace('Video','').toLowerCase(); if(!videoData[type]?.url) { showNotification('لا يوجد فيديو للتنزيل', 'warning'); return; } const link = document.createElement('a'); link.href = videoData[type].url; link.download = videoData[type].fileName||'video.mp4'; document.body.appendChild(link); link.click(); document.body.removeChild(link); }
+    function showNotification(msg, type) { const n=document.createElement('div'); n.style.position='fixed'; n.style.top='20px'; n.style.left='50%'; n.style.transform='translateX(-50%)'; n.style.padding='15px 25px'; n.style.borderRadius='10px'; n.style.color='#fff'; n.style.fontWeight='700'; n.style.zIndex='10000'; n.style.backdropFilter='blur(10px)'; n.style.background=type==='success'?'linear-gradient(135deg, #0f0, #0a0)':type==='warning'?'linear-gradient(135deg, #ff0, #f90)':'linear-gradient(135deg, #0ff, #09f)'; n.innerHTML=`<i class="fas ${type==='success'?'fa-check-circle':type==='warning'?'fa-exclamation-triangle':'fa-info-circle'}"></i> ${msg}`; document.body.appendChild(n); setTimeout(()=>n.remove(),3000); }
     const modalUploadArea = document.getElementById('modalUploadArea');
+    modalUploadArea.addEventListener('dragover', e=>{ e.preventDefault(); modalUploadArea.classList.add('dragover'); });
+    modalUploadArea.addEventListener('dragleave', ()=> modalUploadArea.classList.remove('dragover'));
+    modalUploadArea.addEventListener('drop', e=>{ e.preventDefault(); modalUploadArea.classList.remove('dragover'); if(e.dataTransfer.files.length) handleModalVideoUpload(e.dataTransfer.files); });
     
-    modalUploadArea.addEventListener('dragover', function(e) {
-        e.preventDefault();
-        this.classList.add('dragover');
-    });
-    
-    modalUploadArea.addEventListener('dragleave', function(e) {
-        e.preventDefault();
-        this.classList.remove('dragover');
-    });
-    
-    modalUploadArea.addEventListener('drop', function(e) {
-        e.preventDefault();
-        this.classList.remove('dragover');
-        
-        if (e.dataTransfer.files.length) {
-            handleModalVideoUpload(e.dataTransfer.files);
-        }
-    });
-    
-    // Function to adjust video heights in the practical section
-    function adjustPracticalVideosHeight() {
-        const practicalVideos = document.querySelectorAll('.practical-video-item .responsive-video');
-        
-        // Find the tallest video
-        let maxHeight = 0;
-        practicalVideos.forEach(video => {
-            if (video.offsetHeight > maxHeight) {
-                maxHeight = video.offsetHeight;
-            }
-        });
-        
-        // Set all videos to the same height if they're in flex row layout
-        if (window.innerWidth > 992) {
-            practicalVideos.forEach(video => {
-                video.style.height = maxHeight + 'px';
-            });
-        } else {
-            // Reset to fixed height in column layout
-            practicalVideos.forEach(video => {
-                video.style.height = '200px';
-            });
-        }
-    }
-    
-    // Call this function on load and resize
-    window.addEventListener('load', () => {
-        adjustPracticalVideosHeight();
-        setTimeout(adjustPracticalVideosHeight, 500); // Wait for videos to load
-        
-        // Initialize AI video parameters
-        updateAiVideoParameters();
-    });
-    
-    window.addEventListener('resize', adjustPracticalVideosHeight);
-    
-    // Interactive Quiz System
-    const quizData = {
-        answers: {},
-        scores: {},
-        totalQuestions: 3
-    };
-    
-    function selectOption(optionElement, questionNum) {
-        // Remove selected class from all options in this question
-        const questionCard = optionElement.closest('.question-card');
-        const options = questionCard.querySelectorAll('.option');
-        options.forEach(opt => {
-            opt.classList.remove('selected');
-        });
-        
-        // Add selected class to clicked option
-        optionElement.classList.add('selected');
-        
-        // Store the selected option
-        quizData.answers[questionNum] = {
-            element: optionElement,
-            isCorrect: optionElement.getAttribute('data-correct') === 'true'
-        };
-        
-        // Update progress bar
-        updateQuizProgress();
-    }
-    
-    function checkAnswer(questionNum) {
-        const answer = quizData.answers[questionNum];
-        const feedbackElement = document.getElementById(`feedback${questionNum}`);
-        
-        if (!answer) {
-            feedbackElement.textContent = "الرجاء اختيار إجابة أولاً";
-            feedbackElement.className = "feedback incorrect";
-            return;
-        }
-        
-        // Show correct/incorrect feedback
-        if (answer.isCorrect) {
-            feedbackElement.textContent = "إجابة صحيحة! أحسنت.";
-            feedbackElement.className = "feedback correct";
-            
-            // Mark correct option
-            answer.element.classList.add('correct');
-            answer.element.classList.remove('incorrect');
-            
-            // Store score
-            quizData.scores[questionNum] = 1;
-        } else {
-            feedbackElement.textContent = "إجابة غير صحيحة. حاول مرة أخرى.";
-            feedbackElement.className = "feedback incorrect";
-            
-            // Mark incorrect option
-            answer.element.classList.add('incorrect');
-            answer.element.classList.remove('correct');
-            
-            // Also show the correct answer
-            const optionsContainer = answer.element.parentElement;
-            const correctOption = optionsContainer.querySelector('.option[data-correct="true"]');
-            if (correctOption) {
-                correctOption.classList.add('correct');
-            }
-            
-            // Store score
-            quizData.scores[questionNum] = 0;
-        }
-    }
-    
-    function updateQuizProgress() {
-        const answeredQuestions = Object.keys(quizData.answers).length;
-        const progress = (answeredQuestions / quizData.totalQuestions) * 100;
-        document.getElementById('quizProgress').style.width = `${progress}%`;
-    }
-    
-    function submitAllAnswers() {
-        let totalScore = 0;
-        let answeredCount = 0;
-        
-        // Check all questions
-        for (let i = 1; i <= quizData.totalQuestions; i++) {
-            if (quizData.answers[i]) {
-                checkAnswer(i);
-                if (quizData.scores[i] === 1) {
-                    totalScore++;
-                }
-                answeredCount++;
-            }
-        }
-        
-        if (answeredCount < quizData.totalQuestions) {
-            showNotification(`الرجاء الإجابة على جميع الأسئلة أولاً. لديك ${quizData.totalQuestions - answeredCount} سؤال/أسئلة لم تجب عليها.`, 'warning');
-            return;
-        }
-        
-        // Calculate final score
-        const finalScore = Math.round((totalScore / quizData.totalQuestions) * 100);
-        
-        // Update results display
-        document.getElementById('scoreValue').textContent = `${finalScore}%`;
-        
-        // Update result message
-        const resultMessage = document.getElementById('resultMessage');
-        if (finalScore === 100) {
-            resultMessage.textContent = "ممتاز! لقد أجبت على جميع الأسئلة بشكل صحيح. أنت تفهم قانون فاراداي تماماً.";
-        } else if (finalScore >= 70) {
-            resultMessage.textContent = "جيد جداً! لديك فهم قوي لمبادئ الحث الكهرومغناطيسي.";
-        } else if (finalScore >= 50) {
-            resultMessage.textContent = "جيد! لديك فهم أساسي لكن يمكنك تحسين معرفتك بالتطبيقات العملية.";
-        } else {
-            resultMessage.textContent = "تحتاج إلى مراجعة المادة. ننصحك بإعادة مشاهدة الفيديو التعليمي وقراءة ملف PDF.";
-        }
-        
-        // Show results
-        document.getElementById('quizResults').classList.add('show');
-        
-        // Animate score circle
-        const scoreCircle = document.querySelector('.score-circle');
-        scoreCircle.style.background = `conic-gradient(var(--neon-blue) 0% ${finalScore}%, #333 ${finalScore}% 100%)`;
-        
-        // Scroll to results
-        document.getElementById('quizResults').scrollIntoView({ 
-            behavior: 'smooth',
-            block: 'center'
-        });
-    }
-    
-    function restartQuiz() {
-        // Reset quiz data
-        quizData.answers = {};
-        quizData.scores = {};
-        
-        // Reset all questions
-        for (let i = 1; i <= quizData.totalQuestions; i++) {
-            const questionCard = document.querySelector(`[data-question="${i}"]`);
-            const options = questionCard.querySelectorAll('.option');
-            options.forEach(opt => {
-                opt.classList.remove('selected', 'correct', 'incorrect');
-            });
-            
-            const feedback = document.getElementById(`feedback${i}`);
-            feedback.textContent = '';
-            feedback.className = 'feedback';
-        }
-        
-        // Hide results
-        document.getElementById('quizResults').classList.remove('show');
-        
-        // Reset progress bar
-        document.getElementById('quizProgress').style.width = '0%';
-        
-        // Scroll to top of quiz section
-        document.getElementById('questionsSection').scrollIntoView({ 
-            behavior: 'smooth',
-            block: 'start'
-        });
-    }
-    
-    // Initialize quiz progress
-    updateQuizProgress();
+    let pdfZoom = 1.0;
+    const pdfViewer = document.querySelector('.pdf-viewer');
+    function zoomInPdf() { pdfZoom += 0.2; pdfViewer.style.transform = `scale(${pdfZoom})`; pdfViewer.style.transformOrigin = 'center top'; }
+    function zoomOutPdf() { if(pdfZoom>0.5) { pdfZoom -= 0.2; pdfViewer.style.transform = `scale(${pdfZoom})`; } }
+    function resetZoomPdf() { pdfZoom = 1.0; pdfViewer.style.transform = 'scale(1)'; }
+
+    function adjustPracticalVideosHeight() { const vids=document.querySelectorAll('.practical-video-item .responsive-video'); let maxH=0; vids.forEach(v=>maxH=Math.max(maxH,v.offsetHeight)); if(window.innerWidth>992) vids.forEach(v=>v.style.height=maxH+'px'); else vids.forEach(v=>v.style.height='200px'); }
+    window.addEventListener('load',()=>{ adjustPracticalVideosHeight(); setTimeout(adjustPracticalVideosHeight,500); });
+    window.addEventListener('resize',adjustPracticalVideosHeight);
+
+    // Quiz system
+    const quizAnswers = {}, quizScores = {};
+    function selectOption(el, q) { const parent=el.closest('.question-card'); parent.querySelectorAll('.option').forEach(o=>o.classList.remove('selected')); el.classList.add('selected'); quizAnswers[q]={element:el, isCorrect:el.getAttribute('data-correct')==='true'}; updateQuizProgress(); }
+    function checkAnswer(q) { const a=quizAnswers[q]; const fb=document.getElementById(`feedback${q}`); if(!a){ fb.textContent="اختر إجابة أولاً"; fb.className="feedback incorrect"; return; } if(a.isCorrect){ fb.textContent="إجابة صحيحة"; fb.className="feedback correct"; a.element.classList.add('correct'); quizScores[q]=1; } else{ fb.textContent="إجابة خاطئة"; fb.className="feedback incorrect"; a.element.classList.add('incorrect'); const correct=Array.from(a.element.parentElement.children).find(opt=>opt.getAttribute('data-correct')==='true'); if(correct) correct.classList.add('correct'); quizScores[q]=0; } }
+    function updateQuizProgress() { const answered=Object.keys(quizAnswers).length; document.getElementById('quizProgress').style.width=(answered/3*100)+"%"; }
+    function submitAllAnswers() { for(let i=1;i<=3;i++) if(quizAnswers[i]) checkAnswer(i); const total=Object.values(quizScores).filter(s=>s===1).length; const score=Math.round(total/3*100); document.getElementById('scoreValue').innerText=score+"%"; document.getElementById('quizResults').classList.add('show'); }
+    function restartQuiz() { Object.keys(quizAnswers).forEach(k=>delete quizAnswers[k]); Object.keys(quizScores).forEach(k=>delete quizScores[k]); document.querySelectorAll('.option').forEach(o=>o.classList.remove('selected','correct','incorrect')); document.querySelectorAll('.feedback').forEach(f=>{f.innerHTML=''; f.className='feedback';}); document.getElementById('quizResults').classList.remove('show'); document.getElementById('quizProgress').style.width='0%'; }
+
+    document.getElementById('scrollIndicator').addEventListener('click',()=>document.getElementById('contentSections').scrollIntoView({behavior:'smooth'}));
+    window.addEventListener('scroll',()=>{ const back=document.getElementById('backToSim'); if(scrollY>300) back.classList.add('show'); else back.classList.remove('show'); });
+    document.getElementById('backToSim').addEventListener('click',()=>window.scrollTo({top:0,behavior:'smooth'}));
 
     resize();
     update();
     draw();
-
 </script>
 </body>
 </html>
