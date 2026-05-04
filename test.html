@@ -1419,33 +1419,9 @@
             <div class="video-container">
                 <div class="responsive-video" id="mainVideoPlayer">
                     <video id="mainVideo" controls>
-                        <source id="videoSource" src="assets/video/frad1.mp4" type="video/mp4">
+                        <source id="videoSource" src="assets/video/frad12.mp4" type="video/mp4">
                         متصفحك لا يدعم تشغيل الفيديو.
                     </video>
-                </div>
-            </div>
-            
-            <div class="video-controls">
-                <button class="control-btn primary" onclick="openModal('main')">
-                    <i class="fas fa-upload"></i>
-                    رفع فيديو جديد
-                </button>
-                <button class="control-btn" onclick="toggleFullscreen('mainVideo')">
-                    <i class="fas fa-expand"></i>
-                    ملء الشاشة
-                </button>
-                <button class="control-btn" onclick="downloadVideo('mainVideo')">
-                    <i class="fas fa-download"></i>
-                    تنزيل الفيديو
-                </button>
-            </div>
-            
-            <div class="video-description" id="mainVideoDescription">
-                <h3 style="color: var(--neon-gold); margin-bottom: 10px;" id="mainVideoTitle">فيديو شرح قانون فاراداي</h3>
-                <p id="mainVideoDesc">قم برفع فيديو لشرح قانون فاراداي للحث الكهرومغناطيسي. يجب أن يتضمن الفيديو شرحاً للقانون والتجارب العملية والتطبيقات.</p>
-                <div style="display: flex; justify-content: space-between; margin-top: 15px; color: #888; font-size: 0.9rem;">
-                    <span id="mainVideoInfo">لم يتم رفع فيديو بعد</span>
-                    <span id="mainVideoStats">0 دقيقة • 0 ميجابايت</span>
                 </div>
             </div>
         </section>
@@ -1462,25 +1438,7 @@
                         title="كتاب الحث الكهرومغناطيسي">
                     </iframe>
                 </div>
-                
-                <div class="pdf-controls">
-                    <button class="pdf-btn" onclick="zoomInPdf()">
-                        <i class="fas fa-search-plus"></i>
-                        تكبير
-                    </button>
-                    <button class="pdf-btn" onclick="zoomOutPdf()">
-                        <i class="fas fa-search-minus"></i>
-                        تصغير
-                    </button>
-                    <button class="pdf-btn" onclick="resetZoomPdf()">
-                        <i class="fas fa-sync-alt"></i>
-                        إعادة ضبط
-                    </button>
-                    <a href="https://mohamedrabeea.net/books/read/full/1419" class="pdf-btn download" target="_blank" download="electromagnetic_induction.pdf">
-                        <i class="fas fa-download"></i>
-                        تنزيل PDF
-                    </a>
-                </div>
+            
                 
                 <div class="pdf-info">
                     <h3 style="color: var(--neon-gold); margin-bottom: 15px;">كتاب الحث الكهرومغناطيسي وتطبيقاته</h3>
@@ -1488,24 +1446,6 @@
                         كتاب شامل يغطي جميع جوانب الحث الكهرومغناطيسي، بدءاً من التجارب الأولى لفاراداي وحتى التطبيقات الحديثة في الهندسة الكهربائية. يحتوي على شرح مفصل للنظريات، مع أمثلة عملية وتمارين محلولة.
                     </p>
                     
-                    <div class="pdf-stats">
-                        <div class="stat">
-                            <div class="stat-value">245</div>
-                            <div class="stat-label">عدد الصفحات</div>
-                        </div>
-                        <div class="stat">
-                            <div class="stat-value">12</div>
-                            <div class="stat-label">عدد الفصول</div>
-                        </div>
-                        <div class="stat">
-                            <div class="stat-value">85</div>
-                            <div class="stat-label">تمرين محلول</div>
-                        </div>
-                        <div class="stat">
-                            <div class="stat-value">18.5</div>
-                            <div class="stat-label">ميجابايت</div>
-                        </div>
-                    </div>
                 </div>
             </div>
         </section>
@@ -1648,20 +1588,11 @@
                     </div>
                     <div class="practical-video-upload">
                         <div class="video-controls">
-                            <button class="control-btn primary" onclick="openModal('practical1')">
-                                <i class="fas fa-upload"></i>
-                                رفع فيديو المحولات الكهربائية
-                            </button>
+
                             <button class="control-btn" onclick="toggleFullscreen('practicalVideo1')">
                                 <i class="fas fa-expand"></i>
                                 ملء الشاشة
                             </button>
-                        </div>
-                        <div class="video-description" style="margin-top: 15px;">
-                            <div style="display: flex; justify-content: space-between; color: #888; font-size: 0.9rem;">
-                                <span id="practicalVideo1Info">لم يتم رفع فيديو بعد</span>
-                                <span id="practicalVideo1Stats">0 دقيقة • 0 ميجابايت</span>
-                            </div>
                         </div>
                     </div>
                 </div>
@@ -1684,20 +1615,10 @@
                     </div>
                     <div class="practical-video-upload">
                         <div class="video-controls">
-                            <button class="control-btn primary" onclick="openModal('practical2')">
-                                <i class="fas fa-upload"></i>
-                                رفع فيديو مولدات التيار
-                            </button>
                             <button class="control-btn" onclick="toggleFullscreen('practicalVideo2')">
                                 <i class="fas fa-expand"></i>
                                 ملء الشاشة
                             </button>
-                        </div>
-                        <div class="video-description" style="margin-top: 15px;">
-                            <div style="display: flex; justify-content: space-between; color: #888; font-size: 0.9rem;">
-                                <span id="practicalVideo2Info">لم يتم رفع فيديو بعد</span>
-                                <span id="practicalVideo2Stats">0 دقيقة • 0 ميجابايت</span>
-                            </div>
                         </div>
                     </div>
                 </div>
@@ -1720,20 +1641,10 @@
                     </div>
                     <div class="practical-video-upload">
                         <div class="video-controls">
-                            <button class="control-btn primary" onclick="openModal('practical3')">
-                                <i class="fas fa-upload"></i>
-                                رفع فيديو التطبيقات العملية
-                            </button>
                             <button class="control-btn" onclick="toggleFullscreen('practicalVideo3')">
                                 <i class="fas fa-expand"></i>
                                 ملء الشاشة
                             </button>
-                        </div>
-                        <div class="video-description" style="margin-top: 15px;">
-                            <div style="display: flex; justify-content: space-between; color: #888; font-size: 0.9rem;">
-                                <span id="practicalVideo3Info">لم يتم رفع فيديو بعد</span>
-                                <span id="practicalVideo3Stats">0 دقيقة • 0 ميجابايت</span>
-                            </div>
                         </div>
                     </div>
                 </div>
